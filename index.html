@@ -335,6 +335,14 @@
   .att-hist-stat { flex: 1; min-width: 180px; color: var(--text-light); font-size: 12px; }
   .att-hist-empty { color: var(--text-light); font-size: 12px; padding: 10px 0; }
 
+  /* ---------- GitHub 云端同步 ---------- */
+  .cloud-box { margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--border); }
+  .cloud-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .cloud-row .input { flex: 1; min-width: 200px; }
+  .cloud-status { font-size: 12px; color: var(--text-light); margin-top: 6px; min-height: 16px; }
+  .cloud-status.ok { color: #2f9e6e; }
+  .cloud-status.err { color: #e5484d; }
+
   /* ---------- 学习平台升级：顶部导航 / 欢迎横幅 / 统计卡片 / 学习资源 ---------- */
   .navbar {
     position: sticky; top: 0; z-index: 90;
@@ -573,6 +581,16 @@
       <button class="btn danger" id="btn-clear-all">清空所有数据</button>
     </div>
     <div class="course-legend" style="margin-top:10px;">数据默认保存在浏览器 localStorage 中，关闭浏览器不会丢失；换设备或重装浏览器时可使用导出/导入迁移。</div>
+    <div class="cloud-box" id="cloud-sync-box" style="display:none;">
+      <h3 style="margin:0 0 8px;font-size:13px;color:var(--accent);">🌐 云端同步（GitHub）</h3>
+      <div class="cloud-row">
+        <input type="password" class="input" id="cloud-token" placeholder="GitHub Personal Access Token（PAT）" autocomplete="off">
+        <button class="btn primary" id="btn-cloud-save">保存到云端</button>
+        <button class="btn ghost" id="btn-cloud-pull">从云端拉取</button>
+      </div>
+      <div class="cloud-status" id="cloud-status">尚未同步。令牌仅保存在本机 localStorage（wb_github_token），不会上传；未填令牌时本地保存不受影响。</div>
+      <div class="course-legend" style="margin-top:6px;">同步仓库：CJB0316/workbench（main 分支 data.json）。「保存到云端」把当前数据推送到 GitHub；「从云端拉取」拉取 GitHub 上的最新数据覆盖本地。修改数据后若已填令牌将自动保存到云端。</div>
+    </div>
   </section>
 </div>
 
@@ -759,15 +777,18 @@
   function renderAuth() {
     const box = $('nav-auth');
     if (!box) return;
+    const cs = $('cloud-sync-box');
     if (isAdmin()) {
       box.innerHTML = '<span class="admin-badge">🔓 管理模式</span>' +
         '<button class="btn-sm ghost" id="btn-admin-pwd">修改密码</button>' +
         '<button class="btn-sm danger" id="btn-admin-logout">退出管理</button>';
       $('btn-admin-pwd').addEventListener('click', openAdminPwd);
       $('btn-admin-logout').addEventListener('click', function () { logout(); renderAuth(); toast('已退出管理模式'); });
+      if (cs) cs.style.display = 'block';
     } else {
       box.innerHTML = '<button class="btn-sm" id="btn-admin-login">🔒 管理登录</button>';
       $('btn-admin-login').addEventListener('click', openAdminLogin);
+      if (cs) cs.style.display = 'none';
     }
   }
 
@@ -775,7 +796,7 @@
   const ADMIN_GUARD_SELECTOR = [
     '#btn-course-clear', '#btn-contact-add', '#btn-duty-clear', '#btn-notice-add', '#btn-hw-add', '#btn-act-add',
     '#btn-note-new', '#btn-note-save', '#btn-note-delete', '#btn-task-add',
-    '#btn-export', '#btn-import', '#btn-clear-all',
+    '#btn-export', '#btn-import', '#btn-clear-all', '#btn-cloud-save', '#btn-cloud-pull',
     '#btn-course-save', '#btn-course-del', '#btn-contact-save', '#btn-contact-del', '#btn-duty-save', '#btn-duty-del',
     '#btn-hw-save', '#btn-hw-del', '#btn-act-save', '#btn-act-del',
     '#btn-att-save', '#btn-att-del', '#btn-att-all-normal', '#btn-att-all-late', '#btn-att-all-leave', '#btn-att-all-absent',
@@ -909,8 +930,10 @@
     }
   }
 
-  function saveData(data) {
+  function saveData(data, skipCloud) {
+    if (data && typeof data === 'object') data.updatedAt = Date.now();
     localStorage.setItem(LS_KEY, JSON.stringify(data));
+    if (!skipCloud) autoSaveToCloud();
   }
 
   function toast(msg) {
@@ -1886,6 +1909,133 @@
     });
   }
 
+  /* ================= GitHub 云端同步 ================= */
+  const CLOUD_RAW_URL = 'https://raw.githubusercontent.com/CJB0316/workbench/main/data.json';
+  const CLOUD_API_URL = 'https://api.github.com/repos/CJB0316/workbench/contents/data.json';
+  const CLOUD_TOKEN_KEY = 'wb_github_token';
+
+  function getCloudToken() {
+    try { return localStorage.getItem(CLOUD_TOKEN_KEY) || ''; } catch (e) { return ''; }
+  }
+  function setCloudStatus(msg, type) {
+    const box = $('cloud-status');
+    if (!box) return;
+    box.textContent = msg;
+    box.className = 'cloud-status' + (type ? ' ' + type : '');
+  }
+  function fetchWithTimeout(url, opts, ms) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(function () { ctrl.abort(); }, ms || 8000);
+    opts = opts || {};
+    opts.signal = ctrl.signal;
+    return fetch(url, opts).then(function (r) { clearTimeout(timer); return r; }, function (e) { clearTimeout(timer); throw e; });
+  }
+  function utf8ToBase64(str) {
+    const bytes = new TextEncoder().encode(str);
+    let bin = '';
+    for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+    return btoa(bin);
+  }
+
+  function renderAllModules() {
+    renderCourseTable(); renderTasks(); renderNotes(); renderContacts(); renderDuty();
+    renderNotices(); renderHomework(); renderActivities(); renderAttendance(); renderTimer();
+  }
+
+  async function fetchCloudData() {
+    const res = await fetchWithTimeout(CLOUD_RAW_URL, { method: 'GET', cache: 'no-cache' }, 8000);
+    if (!res.ok) throw new Error('云端请求失败 HTTP ' + res.status);
+    return JSON.parse(await res.text());
+  }
+
+  async function pullFromCloud(manual) {
+    if (!manual) setCloudStatus('正在自动拉取云端数据…');
+    try {
+      const cloud = await fetchCloudData();
+      if (!cloud || typeof cloud !== 'object') throw new Error('云端数据格式不正确');
+      const cloudUpdated = (cloud.updatedAt && typeof cloud.updatedAt === 'number') ? cloud.updatedAt : 0;
+      const localUpdated = (data && data.updatedAt && typeof data.updatedAt === 'number') ? data.updatedAt : 0;
+      if (cloudUpdated <= localUpdated) {
+        if (manual) setCloudStatus('云端数据不新于本地（已是最新），保留本地数据');
+        else setCloudStatus('本地数据已是最新，无需拉取');
+        return false;
+      }
+      data = Object.assign({}, defaultData(), cloud);
+      if (typeof data.updatedAt !== 'number') data.updatedAt = Date.now();
+      localStorage.setItem(LS_KEY, JSON.stringify(data));
+      renderAllModules();
+      setCloudStatus('已从云端拉取并覆盖本地（' + new Date().toLocaleTimeString() + '）', 'ok');
+      toast('已从云端同步最新数据');
+      return true;
+    } catch (e) {
+      if (manual) setCloudStatus('拉取失败：' + e.message, 'err');
+      else setCloudStatus('云端暂不可用，已使用本地数据');
+      return false;
+    }
+  }
+
+  async function saveToCloud() {
+    const token = getCloudToken();
+    if (!token) { setCloudStatus('请先填入 GitHub 令牌', 'err'); return false; }
+    setCloudStatus('正在保存到云端…');
+    try {
+      const metaRes = await fetchWithTimeout(CLOUD_API_URL, {
+        method: 'GET',
+        headers: { 'Authorization': 'Bearer ' + token, 'Accept': 'application/vnd.github+json' }
+      }, 10000);
+      if (!metaRes.ok) throw new Error('获取 sha 失败 HTTP ' + metaRes.status);
+      const meta = await metaRes.json();
+      if (!meta.sha) throw new Error('云端 data.json 不存在，请先在仓库上传初始 data.json');
+      const payload = {
+        message: 'auto sync from workbench @ ' + new Date().toISOString(),
+        content: utf8ToBase64(JSON.stringify(data, null, 2)),
+        sha: meta.sha
+      };
+      const putRes = await fetchWithTimeout(CLOUD_API_URL, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + token,
+          'Accept': 'application/vnd.github+json'
+        },
+        body: JSON.stringify(payload)
+      }, 15000);
+      if (!putRes.ok) {
+        let detail = '';
+        try { detail = (await putRes.text()).slice(0, 200); } catch (e) {}
+        throw new Error('上传失败 HTTP ' + putRes.status + (detail ? '：' + detail : ''));
+      }
+      setCloudStatus('已保存到云端（' + new Date().toLocaleTimeString() + '）', 'ok');
+      return true;
+    } catch (e) {
+      setCloudStatus('保存失败：' + e.message, 'err');
+      return false;
+    }
+  }
+
+  let _cloudSaving = false;
+  function autoSaveToCloud() {
+    if (!getCloudToken()) return;
+    if (_cloudSaving) return;
+    _cloudSaving = true;
+    saveToCloud().then(function () {}, function () {}).finally(function () { _cloudSaving = false; });
+  }
+
+  $('cloud-token').value = getCloudToken();
+  $('btn-cloud-save').addEventListener('click', function () {
+    const t = $('cloud-token').value.trim();
+    if (!t) { setCloudStatus('请先填入 GitHub 令牌', 'err'); return; }
+    localStorage.setItem(CLOUD_TOKEN_KEY, t);
+    syncPomodoroSession();
+    saveData(data, true);
+    saveToCloud().then(function (ok) { if (ok) toast('已保存到云端'); });
+  });
+  $('btn-cloud-pull').addEventListener('click', function () {
+    const t = $('cloud-token').value.trim();
+    if (t) localStorage.setItem(CLOUD_TOKEN_KEY, t);
+    pullFromCloud(true).then(function (ok) { if (ok) toast('已从云端拉取最新数据'); });
+  });
+
   /* ================= 数据管理 ================= */
   $('btn-export').addEventListener('click', function () {
     syncPomodoroSession();
@@ -2042,6 +2192,7 @@
   renderResources();
   switchTab('home');
   renderAuth();
+  pullFromCloud(false);
 })();
 </script>
 </body>
