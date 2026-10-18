@@ -643,6 +643,9 @@
 (function () {
   'use strict';
 
+  /* ================= 基础工具函数（提前定义，避免TDZ） ================= */
+  const $ = (id) => document.getElementById(id);
+
   /* ================= 后台权限机制 ================= */
   const AUTH_KEY = 'monitor_workbench_admin';
   const SESSION_AUTH = 'monitor_workbench_admin_session';
@@ -746,7 +749,6 @@
   }, true);
 
   /* ================= 工具函数 ================= */
-  const $ = (id) => document.getElementById(id);
   const LS_KEY = 'monitor_workbench_v1';
 
   function todayKey() {
