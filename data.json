@@ -383,19 +383,6 @@
       "remark": ""
     },
     {
-      "id": "c2616210122",
-      "name": "时畅",
-      "studentId": "2616210122",
-      "gender": "女",
-      "birth": "2007-02-18",
-      "idcard": "34132420070218002X",
-      "hometown": "宿州市",
-      "phone": "",
-      "qq": "",
-      "dorm": "",
-      "remark": ""
-    },
-    {
       "id": "c2616210123",
       "name": "孙瑞泽",
       "studentId": "2616210123",
@@ -681,5 +668,5 @@
   "homework": [],
   "activities": [],
   "attendance": {},
-  "updatedAt": 1792339529004
+  "updatedAt": 1792339542379
 }
