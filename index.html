@@ -310,6 +310,31 @@
   .modal h3 { font-size: 15px; margin-bottom: 12px; }
   .modal .modal-btns { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
 
+  /* ---------- 班级考勤表 ---------- */
+  .att-toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
+  .att-toolbar .input { width: auto; }
+  .att-label { font-size: 13px; font-weight: 600; color: var(--text); }
+  .att-batch { display: flex; gap: 6px; flex-wrap: wrap; }
+  .att-stat { font-size: 13px; color: var(--text); margin: 8px 0; background: var(--primary-bg); padding: 8px 12px; border-radius: 8px; }
+  .att-stat b { font-weight: 700; }
+  .att-list { max-height: 340px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; }
+  .att-item { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 10px; border-bottom: 1px solid var(--border); font-size: 13px; }
+  .att-item:last-child { border-bottom: none; }
+  .att-name { min-width: 84px; font-weight: 600; }
+  .att-opts { display: flex; gap: 6px; flex-wrap: wrap; }
+  .att-opt { border: 1px solid var(--border); background: #fff; color: var(--text-light); font-size: 12px; padding: 3px 10px; border-radius: 999px; cursor: pointer; transition: all 0.15s; }
+  .att-opt:hover { border-color: var(--primary); color: var(--primary); }
+  .att-opt.active-normal { background: #e8f7ee; color: #2f9e6e; border-color: #2f9e6e; font-weight: 600; }
+  .att-opt.active-late { background: #fff7e6; color: #e59f19; border-color: #e59f19; font-weight: 600; }
+  .att-opt.active-leave { background: #eef0ff; color: #7b5cf0; border-color: #7b5cf0; font-weight: 600; }
+  .att-opt.active-absent { background: #fdeeee; color: #e5484d; border-color: #e5484d; font-weight: 600; }
+  .att-history { margin-top: 12px; border-top: 1px solid var(--border); padding-top: 10px; }
+  .att-hist-title { font-size: 13px; font-weight: 700; margin-bottom: 6px; }
+  .att-hist-item { display: flex; align-items: center; gap: 8px; padding: 6px 4px; font-size: 13px; border-bottom: 1px dashed var(--border); flex-wrap: wrap; }
+  .att-hist-date { font-weight: 600; min-width: 92px; }
+  .att-hist-stat { flex: 1; min-width: 180px; color: var(--text-light); font-size: 12px; }
+  .att-hist-empty { color: var(--text-light); font-size: 12px; padding: 10px 0; }
+
   /* ---------- 学习平台升级：顶部导航 / 欢迎横幅 / 统计卡片 / 学习资源 ---------- */
   .navbar {
     position: sticky; top: 0; z-index: 90;
@@ -517,6 +542,25 @@
   <section class="card activities" data-tab="class">
     <h2><span class="icon">🎯</span> 班级活动记录 <button class="btn-sm" id="btn-act-add">+ 记录活动</button></h2>
     <ul class="act-list" id="act-list"></ul>
+  </section>
+
+  <!-- ============ 班级考勤表 ============ -->
+  <section class="card attendance" data-tab="class">
+    <h2><span class="icon">📝</span> 班级考勤表 <button class="btn-sm danger" id="btn-att-del" style="display:none;">删除当天记录</button></h2>
+    <div class="att-toolbar">
+      <label class="att-label">考勤日期</label>
+      <input type="date" class="input" id="att-date">
+      <span class="att-batch">
+        <button class="btn-sm" id="btn-att-all-normal">全部正常</button>
+        <button class="btn-sm ghost" id="btn-att-all-late">全部迟到</button>
+        <button class="btn-sm ghost" id="btn-att-all-leave">全部请假</button>
+        <button class="btn-sm ghost" id="btn-att-all-absent">全部缺勤</button>
+      </span>
+      <button class="btn primary" id="btn-att-save" style="margin-left:auto;">保存考勤</button>
+    </div>
+    <div class="att-stat" id="att-stat"></div>
+    <div class="att-list" id="att-list"></div>
+    <div class="att-history" id="att-history"></div>
   </section>
 
   <!-- ============ 数据管理 ============ -->
@@ -734,8 +778,10 @@
     '#btn-export', '#btn-import', '#btn-clear-all',
     '#btn-course-save', '#btn-course-del', '#btn-contact-save', '#btn-contact-del', '#btn-duty-save', '#btn-duty-del',
     '#btn-hw-save', '#btn-hw-del', '#btn-act-save', '#btn-act-del',
+    '#btn-att-save', '#btn-att-del', '#btn-att-all-normal', '#btn-att-all-late', '#btn-att-all-leave', '#btn-att-all-absent',
     'td.cell', '.task-check', '.task-del', '.notes-list li .note-del', '.contact-item .btn-sm', '.duty-day',
-    '.notice-item .item-del', '.hw-item .btn-sm', '.hw-item .item-del', '.act-item .btn-sm', '.act-item .item-del'
+    '.notice-item .item-del', '.hw-item .btn-sm', '.hw-item .item-del', '.act-item .btn-sm', '.act-item .item-del',
+    '.att-opt', '.att-hist-del'
   ].join(',');
   document.addEventListener('click', function (e) {
     if (isAdmin()) return;
@@ -842,7 +888,7 @@
         2: ['范晓凤', '彭欣茹', '单幸', '叶可心', '王欣淳', '徐家豪', '韩宇'],
         3: ['倪雨晴', '张明组', '吴芷燕', '孙瑞泽', '王启蒙', '马延喆', '张高强'],
         4: ['金宗茹', '金义玲', '吴静茹', '周景妍', '邢娜娜', '付俊成', '时畅']
-      }, notices: [], homework: [], activities: []
+      }, notices: [], homework: [], activities: [], attendance: {}
     };
   }
 
@@ -1653,6 +1699,193 @@
     if (e.target === this) this.classList.remove('show');
   });
 
+  /* ================= 班级考勤表 ================= */
+  const ATT_STATES = ['normal', 'late', 'leave', 'absent'];
+  const ATT_STATE_TEXT = { normal: '正常', late: '迟到', leave: '请假', absent: '缺勤' };
+  let editingAttDate = null; // 当前编辑中的日期（YYYY-MM-DD）
+
+  function attendanceRecord(dateStr) {
+    return (data.attendance && data.attendance[dateStr]) ? data.attendance[dateStr] : null;
+  }
+
+  // 按通讯录现有成员生成考勤名单（id -> 姓名）
+  function attendanceMembers() {
+    const list = [];
+    (data.contacts || []).forEach(function (c) {
+      list.push({ id: c.id, name: c.name });
+    });
+    return list;
+  }
+
+  // 渲染统计概览
+  function renderAttStat(dateStr) {
+    const box = $('att-stat');
+    const rec = attendanceRecord(dateStr);
+    if (!rec || !rec.items) {
+      box.innerHTML = '';
+      return;
+    }
+    const count = {};
+    ATT_STATES.forEach(function (s) { count[s] = 0; });
+    rec.items.forEach(function (it) { if (count[it.state] !== undefined) count[it.state]++; });
+    box.innerHTML = '📊 ' + escapeHtml(dateStr) + ' 考勤统计：' +
+      '<b class="active-normal" style="padding:0 2px;">正常 ' + count.normal + '</b>' +
+      '<b class="active-late" style="padding:0 2px;">迟到 ' + count.late + '</b>' +
+      '<b class="active-leave" style="padding:0 2px;">请假 ' + count.leave + '</b>' +
+      '<b class="active-absent" style="padding:0 2px;">缺勤 ' + count.absent + '</b>' +
+      '（共 ' + rec.items.length + ' 人）';
+  }
+
+  // 渲染指定日期的逐人考勤编辑列表
+  function renderAttendanceEditor(dateStr) {
+    const box = $('att-list');
+    const members = attendanceMembers();
+    const rec = attendanceRecord(dateStr);
+    const stateOf = {};
+    if (rec && rec.items) {
+      rec.items.forEach(function (it) { stateOf[it.id] = it.state; });
+    }
+    if (!members.length) {
+      box.innerHTML = '<div class="att-hist-empty">暂无通讯录成员，请先在“班级通讯录”中添加成员。</div>';
+      return;
+    }
+    let html = '';
+    members.forEach(function (m, idx) {
+      const cur = stateOf[m.id] || 'normal';
+      const opts = ATT_STATES.map(function (s) {
+        return '<button class="att-opt' + (s === cur ? ' active-' + s : '') + '" data-state="' + s + '" data-id="' + m.id + '" data-name="' + escapeHtml(m.name) + '">' + ATT_STATE_TEXT[s] + '</button>';
+      }).join('');
+      html += '<div class="att-item"><span class="att-name">' + escapeHtml(m.name) + '</span><span class="att-opts">' + opts + '</span></div>';
+    });
+    box.innerHTML = html;
+    // 更新顶部删除按钮显隐
+    $('btn-att-del').style.display = rec ? 'inline-block' : 'none';
+    renderAttStat(dateStr);
+  }
+
+  // 渲染历史记录列表
+  function renderAttendanceHistory() {
+    const box = $('att-history');
+    const dates = Object.keys(data.attendance || {}).sort().reverse();
+    if (!dates.length) {
+      box.innerHTML = '';
+      return;
+    }
+    let html = '<div class="att-hist-title">📚 考勤历史（' + dates.length + ' 天）</div>';
+    dates.forEach(function (d) {
+      const rec = data.attendance[d] || { items: [] };
+      const count = {};
+      ATT_STATES.forEach(function (s) { count[s] = 0; });
+      rec.items.forEach(function (it) { if (count[it.state] !== undefined) count[it.state]++; });
+      html += '<div class="att-hist-item"><span class="att-hist-date">' + escapeHtml(d) + '</span>' +
+        '<span class="att-hist-stat">正常 ' + count.normal + ' / 迟到 ' + count.late + ' / 请假 ' + count.leave + ' / 缺勤 ' + count.absent + '</span>' +
+        '<button class="btn-sm ghost" data-act="view" data-date="' + escapeHtml(d) + '">查看</button>' +
+        '<button class="btn-sm ghost" data-act="edit" data-date="' + escapeHtml(d) + '">修改</button>' +
+        '<button class="btn-sm danger att-hist-del" data-act="del" data-date="' + escapeHtml(d) + '">删除</button></div>';
+    });
+    box.innerHTML = html;
+  }
+
+  function renderAttendance() {
+    renderAttendanceEditor(editingAttDate || $('att-date').value || todayKey());
+    renderAttendanceHistory();
+  }
+
+  function initAttendanceModule() {
+    const dateInput = $('att-date');
+    dateInput.value = todayKey();
+
+    // 日期切换：加载或新建当天考勤
+    dateInput.addEventListener('change', function () {
+      editingAttDate = dateInput.value;
+      renderAttendanceEditor(editingAttDate);
+    });
+
+    // 逐人状态切换
+    $('att-list').addEventListener('click', function (e) {
+      const btn = e.target.closest('.att-opt');
+      if (!btn) return;
+      e.preventDefault();
+      const id = btn.getAttribute('data-id');
+      const state = btn.getAttribute('data-state');
+      const dateStr = editingAttDate || dateInput.value;
+      if (!dateStr) return;
+      if (!data.attendance[dateStr]) data.attendance[dateStr] = { items: [] };
+      let rec = data.attendance[dateStr];
+      const item = rec.items.filter(function (it) { return it.id === id; })[0];
+      if (item) { item.state = state; } else { rec.items.push({ id: id, name: btn.getAttribute('data-name'), state: state }); }
+      renderAttendanceEditor(dateStr);
+      // 不自动保存，仅本地编辑态；保存按钮统一落盘
+      data.attendance[dateStr] = rec;
+    });
+
+    // 批量设置全部状态
+    function setAll(state) {
+      const dateStr = editingAttDate || dateInput.value;
+      if (!dateStr) return;
+      const members = attendanceMembers();
+      data.attendance[dateStr] = { items: members.map(function (m) { return { id: m.id, name: m.name, state: state }; }) };
+      renderAttendanceEditor(dateStr);
+      toast('已批量设置为“' + ATT_STATE_TEXT[state] + '”，点击保存后生效');
+    }
+    $('btn-att-all-normal').addEventListener('click', function () { setAll('normal'); });
+    $('btn-att-all-late').addEventListener('click', function () { setAll('late'); });
+    $('btn-att-all-leave').addEventListener('click', function () { setAll('leave'); });
+    $('btn-att-all-absent').addEventListener('click', function () { setAll('absent'); });
+
+    // 保存当天考勤
+    $('btn-att-save').addEventListener('click', function () {
+      const dateStr = editingAttDate || dateInput.value;
+      if (!dateStr) { toast('请先选择日期'); return; }
+      const members = attendanceMembers();
+      if (!members.length) { toast('暂无通讯录成员，无法保存考勤'); return; }
+      // 确保每个成员都有状态记录
+      const seen = {};
+      const base = (data.attendance[dateStr] && data.attendance[dateStr].items) || [];
+      base.forEach(function (it) { seen[it.id] = true; });
+      const items = base.slice();
+      members.forEach(function (m) {
+        if (!seen[m.id]) items.push({ id: m.id, name: m.name, state: 'normal' });
+      });
+      data.attendance[dateStr] = { date: dateStr, items: items, savedAt: Date.now() };
+      saveData(data);
+      renderAttendance();
+      toast('考勤已保存（' + dateStr + '）');
+    });
+
+    // 删除当天记录
+    $('btn-att-del').addEventListener('click', function () {
+      const dateStr = editingAttDate || dateInput.value;
+      if (!dateStr) { return; }
+      if (!window.confirm('确定删除 ' + dateStr + ' 的考勤记录吗？删除后不可恢复。')) return;
+      delete data.attendance[dateStr];
+      saveData(data);
+      renderAttendance();
+      toast('已删除 ' + dateStr + ' 的考勤记录');
+    });
+
+    // 历史列表操作：查看 / 修改 / 删除
+    $('att-history').addEventListener('click', function (e) {
+      const btn = e.target.closest('[data-act]');
+      if (!btn) return;
+      e.preventDefault();
+      const act = btn.getAttribute('data-act');
+      const d = btn.getAttribute('data-date');
+      if (act === 'view' || act === 'edit') {
+        editingAttDate = d;
+        dateInput.value = d;
+        renderAttendanceEditor(d);
+        toast(act === 'view' ? '已加载 ' + d + ' 的考勤记录' : '正在修改 ' + d + ' 的考勤，修改后请点击保存');
+      } else if (act === 'del') {
+        if (!window.confirm('确定删除 ' + d + ' 的考勤记录吗？删除后不可恢复。')) return;
+        delete data.attendance[d];
+        saveData(data);
+        renderAttendance();
+        toast('已删除 ' + d + ' 的考勤记录');
+      }
+    });
+  }
+
   /* ================= 数据管理 ================= */
   $('btn-export').addEventListener('click', function () {
     syncPomodoroSession();
@@ -1801,6 +2034,8 @@
   renderNotices();
   renderHomework();
   renderActivities();
+  initAttendanceModule();
+  renderAttendance();
   syncPomodoroSession();
   renderTimer();
   initHeroGreet();
