@@ -327,6 +327,9 @@
   }
   .nav-links a:hover { color: var(--primary); background: var(--primary-bg); }
   .nav-links a.active { color: var(--primary); font-weight: 600; border-bottom-color: var(--primary); background: var(--primary-bg); }
+  .nav-auth { display: flex; align-items: center; gap: 6px; padding: 8px 0; flex-wrap: wrap; }
+  .nav-auth .btn-sm { font-size: 12px; padding: 5px 10px; }
+  .admin-badge { font-size: 12px; font-weight: 600; color: #2f9e6e; background: rgba(47,158,110,0.12); padding: 4px 10px; border-radius: 999px; display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
 
   .tab-view { grid-column: 1 / -1; }
   .hero-banner {
@@ -400,6 +403,7 @@
     <a href="javascript:void(0)" data-tab-target="class">班级管理</a>
     <a href="javascript:void(0)" data-tab-target="data">数据管理</a>
   </div>
+  <div class="nav-auth" id="nav-auth"></div>
 </nav>
 
 <div class="container">
@@ -606,11 +610,140 @@
   </div>
 </div>
 
+<!-- 管理登录弹窗 -->
+<div class="modal-mask" id="modal-admin-login">
+  <div class="modal">
+    <h3>🔒 管理登录</h3>
+    <div class="form-row"><label>管理密码</label><input class="input" id="admin-login-pwd" type="password" maxlength="30" placeholder="请输入管理密码"></div>
+    <p style="font-size:12px;color:#8a919f;margin:0;">浏览无需登录；修改数据需管理权限。初始密码 0316，登录后可在管理模式中修改。</p>
+    <div class="modal-btns">
+      <button class="btn ghost" id="btn-admin-login-cancel">取消</button>
+      <button class="btn primary" id="btn-admin-login-ok">登录</button>
+    </div>
+  </div>
+</div>
+
+<!-- 修改密码弹窗 -->
+<div class="modal-mask" id="modal-admin-pwd">
+  <div class="modal">
+    <h3>🔑 修改管理密码</h3>
+    <div class="form-row"><label>旧密码</label><input class="input" id="admin-old-pwd" type="password" maxlength="30" placeholder="请输入当前管理密码"></div>
+    <div class="form-row"><label>新密码</label><input class="input" id="admin-new-pwd" type="password" maxlength="30" placeholder="至少 4 位"></div>
+    <div class="form-row"><label>确认新密码</label><input class="input" id="admin-new-pwd2" type="password" maxlength="30" placeholder="再次输入新密码"></div>
+    <div class="modal-btns">
+      <button class="btn ghost" id="btn-admin-pwd-cancel">取消</button>
+      <button class="btn primary" id="btn-admin-pwd-ok">确认修改</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
 (function () {
   'use strict';
+
+  /* ================= 后台权限机制 ================= */
+  const AUTH_KEY = 'monitor_workbench_admin';
+  const SESSION_AUTH = 'monitor_workbench_admin_session';
+  const SESSION_FLAG = 'monitor_workbench_admin_page';
+  // 刷新页面需重新登录：本标签页已初始化过（刷新/复用）则清除登录态
+  if (sessionStorage.getItem(SESSION_FLAG)) {
+    sessionStorage.removeItem(SESSION_AUTH);
+  } else {
+    sessionStorage.setItem(SESSION_FLAG, '1');
+  }
+  function getAdminPwd() { return localStorage.getItem(AUTH_KEY) || '0316'; }
+  function isAdmin() { return sessionStorage.getItem(SESSION_AUTH) === '1'; }
+  function login(pwd) {
+    if (String(pwd).trim() === String(getAdminPwd())) {
+      sessionStorage.setItem(SESSION_AUTH, '1');
+      return true;
+    }
+    return false;
+  }
+  function logout() { sessionStorage.removeItem(SESSION_AUTH); }
+  function changeAdminPwd(oldPwd, newPwd) {
+    if (String(oldPwd) !== String(getAdminPwd())) return { ok: false, msg: '旧密码错误' };
+    if (!newPwd || String(newPwd).trim().length < 4) return { ok: false, msg: '新密码至少 4 位' };
+    localStorage.setItem(AUTH_KEY, String(newPwd).trim());
+    return { ok: true, msg: '管理密码已修改并立即生效' };
+  }
+
+  /* ---- 管理登录 / 修改密码弹窗 ---- */
+  function openAdminLogin() {
+    const m = $('modal-admin-login');
+    if (!m || m.classList.contains('show')) return;
+    m.classList.add('show');
+    const inp = $('admin-login-pwd');
+    if (inp) { inp.value = ''; setTimeout(function () { inp.focus(); }, 60); }
+  }
+  function openAdminPwd() {
+    const m = $('modal-admin-pwd');
+    if (!m) return;
+    m.classList.add('show');
+    $('admin-old-pwd').value = ''; $('admin-new-pwd').value = ''; $('admin-new-pwd2').value = '';
+    setTimeout(function () { $('admin-old-pwd').focus(); }, 60);
+  }
+  function closeModal(id) { const m = $(id); if (m) m.classList.remove('show'); }
+
+  $('btn-admin-login-ok').addEventListener('click', function () {
+    const pwd = $('admin-login-pwd').value;
+    if (login(pwd)) { closeModal('modal-admin-login'); renderAuth(); toast('已进入管理模式，修改操作已解锁'); }
+    else { toast('密码错误'); $('admin-login-pwd').value = ''; $('admin-login-pwd').focus(); }
+  });
+  $('btn-admin-login-cancel').addEventListener('click', function () { closeModal('modal-admin-login'); });
+  $('modal-admin-login').addEventListener('click', function (e) { if (e.target === this) closeModal('modal-admin-login'); });
+  $('admin-login-pwd').addEventListener('keydown', function (e) { if (e.key === 'Enter') $('btn-admin-login-ok').click(); });
+
+  $('btn-admin-pwd-ok').addEventListener('click', function () {
+    const oldPwd = $('admin-old-pwd').value;
+    const newPwd = $('admin-new-pwd').value;
+    const newPwd2 = $('admin-new-pwd2').value;
+    if (newPwd !== newPwd2) { toast('两次输入的新密码不一致'); return; }
+    const r = changeAdminPwd(oldPwd, newPwd);
+    toast(r.msg);
+    if (r.ok) closeModal('modal-admin-pwd');
+  });
+  $('btn-admin-pwd-cancel').addEventListener('click', function () { closeModal('modal-admin-pwd'); });
+  $('modal-admin-pwd').addEventListener('click', function (e) { if (e.target === this) closeModal('modal-admin-pwd'); });
+
+  /* ---- 顶部导航管理入口 ---- */
+  function renderAuth() {
+    const box = $('nav-auth');
+    if (!box) return;
+    if (isAdmin()) {
+      box.innerHTML = '<span class="admin-badge">🔓 管理模式</span>' +
+        '<button class="btn-sm ghost" id="btn-admin-pwd">修改密码</button>' +
+        '<button class="btn-sm danger" id="btn-admin-logout">退出管理</button>';
+      $('btn-admin-pwd').addEventListener('click', openAdminPwd);
+      $('btn-admin-logout').addEventListener('click', function () { logout(); renderAuth(); toast('已退出管理模式'); });
+    } else {
+      box.innerHTML = '<button class="btn-sm" id="btn-admin-login">🔒 管理登录</button>';
+      $('btn-admin-login').addEventListener('click', openAdminLogin);
+    }
+  }
+
+  /* ---- 未解锁拦截：所有修改类操作统一进入登录弹窗 ---- */
+  const ADMIN_GUARD_SELECTOR = [
+    '#btn-course-clear', '#btn-contact-add', '#btn-duty-clear', '#btn-notice-add', '#btn-hw-add', '#btn-act-add',
+    '#btn-note-new', '#btn-note-save', '#btn-note-delete', '#btn-task-add',
+    '#btn-export', '#btn-import', '#btn-clear-all',
+    '#btn-course-save', '#btn-course-del', '#btn-contact-save', '#btn-contact-del', '#btn-duty-save', '#btn-duty-del',
+    '#btn-hw-save', '#btn-hw-del', '#btn-act-save', '#btn-act-del',
+    'td.cell', '.task-check', '.task-del', '.notes-list li .note-del', '.contact-item .btn-sm', '.duty-day',
+    '.notice-item .item-del', '.hw-item .btn-sm', '.hw-item .item-del', '.act-item .btn-sm', '.act-item .item-del'
+  ].join(',');
+  document.addEventListener('click', function (e) {
+    if (isAdmin()) return;
+    const t = e.target;
+    if (t && t.closest && t.closest(ADMIN_GUARD_SELECTOR)) {
+      e.preventDefault();
+      e.stopPropagation();
+      openAdminLogin();
+      toast('该操作需要管理权限，请输入管理密码');
+    }
+  }, true);
 
   /* ================= 工具函数 ================= */
   const $ = (id) => document.getElementById(id);
@@ -1671,6 +1804,7 @@
   initHeroGreet();
   renderResources();
   switchTab('home');
+  renderAuth();
 })();
 </script>
 </body>
