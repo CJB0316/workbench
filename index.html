@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>班长学习工作台</title>
+<title>软件技术26(1)班学习工作台</title>
 <style>
   :root {
     --primary: #4f6ef7;
@@ -421,7 +421,7 @@
 
 <header>
   <h1>📚 淮南师范学院应用技术学院</h1>
-  <div class="sub">软件技术26(1)班 · 班长学习工作台</div>
+  <div class="sub">软件技术26(1)班 · 班级学习工作台</div>
   <div class="date-info">
     <span id="today-date"></span>
     <span id="week-info"></span>
@@ -429,10 +429,11 @@
 </header>
 
 <nav class="navbar" id="main-nav">
-  <div class="nav-brand">📚 青蓝学习平台</div>
+  <div class="nav-brand">📚 26(1)班学习平台</div>
   <div class="nav-links">
     <a href="javascript:void(0)" data-tab-target="home" class="active">首页</a>
     <a href="javascript:void(0)" data-tab-target="study">课程学习</a>
+    <a href="javascript:void(0)" data-tab-target="notes">共享笔记</a>
     <a href="javascript:void(0)" data-tab-target="class">班级管理</a>
     <a href="javascript:void(0)" data-tab-target="data">数据管理</a>
   </div>
@@ -443,12 +444,12 @@
   <section class="tab-view" id="tab-home" data-view="home">
     <div class="hero-banner">
       <div class="hero-text">
-        <div class="hero-greet" id="hero-greet">你好，班长！</div>
-        <div class="hero-sub">欢迎使用淮南师范学院应用技术学院 · 软件技术26(1)班 学习平台</div>
+        <div class="hero-greet" id="hero-greet">你好，同学们！</div>
+        <div class="hero-sub">欢迎来到淮南师范学院应用技术学院 · 软件技术26(1)班 学习平台</div>
       </div>
       <div class="hero-actions">
         <button class="btn primary" id="btn-hero-study">开始学习</button>
-        <button class="btn ghost-light" id="btn-hero-note">记录笔记</button>
+        <button class="btn ghost-light" id="btn-hero-note">写共享笔记</button>
       </div>
     </div>
     <div class="stat-grid" id="stat-grid"></div>
@@ -498,8 +499,9 @@
     <div class="task-stats" id="task-stats"></div>
   </section>
 
-  <section class="card notes" data-tab="study">
-    <h2><span class="icon">📝</span> 学习笔记</h2>
+  <section class="card notes" data-tab="notes">
+    <h2><span class="icon">📝</span> 全班共享笔记</h2>
+    <div class="course-legend" style="margin-top:0;margin-bottom:10px;">💡 全班共享笔记：所有同学均可新增、修改、删除，内容自动同步到云端（workbench-notes 仓库），无需管理权限。</div>
     <div class="notes-layout">
       <div class="notes-side">
         <button class="btn primary" id="btn-note-new" style="margin-bottom:10px;width:100%;">+ 新建笔记</button>
@@ -594,7 +596,7 @@
   </section>
 </div>
 
-<div class="footer-note">班长学习工作台 · 个人学习 + 班级管理 · 数据仅保存在你的浏览器中</div>
+<div class="footer-note">软件技术26(1)班学习工作台 · 全班共用 · 核心数据仅管理员可改 · 共享笔记云端同步</div>
 
 <!-- 课程编辑弹窗 -->
 <div class="modal-mask" id="modal-course">
@@ -795,12 +797,12 @@
   /* ---- 未解锁拦截：所有修改类操作统一进入登录弹窗 ---- */
   const ADMIN_GUARD_SELECTOR = [
     '#btn-course-clear', '#btn-contact-add', '#btn-duty-clear', '#btn-notice-add', '#btn-hw-add', '#btn-act-add',
-    '#btn-note-new', '#btn-note-save', '#btn-note-delete', '#btn-task-add',
+    '#btn-task-add',
     '#btn-export', '#btn-import', '#btn-clear-all', '#btn-cloud-save', '#btn-cloud-pull',
     '#btn-course-save', '#btn-course-del', '#btn-contact-save', '#btn-contact-del', '#btn-duty-save', '#btn-duty-del',
     '#btn-hw-save', '#btn-hw-del', '#btn-act-save', '#btn-act-del',
     '#btn-att-save', '#btn-att-del', '#btn-att-all-normal', '#btn-att-all-late', '#btn-att-all-leave', '#btn-att-all-absent',
-    'td.cell', '.task-check', '.task-del', '.notes-list li .note-del', '.contact-item .btn-sm', '.duty-day',
+    'td.cell', '.task-check', '.task-del', '.contact-item .btn-sm', '.duty-day',
     '.notice-item .item-del', '.hw-item .btn-sm', '.hw-item .item-del', '.act-item .btn-sm', '.act-item .item-del',
     '.att-opt', '.att-hist-del'
   ].join(',');
@@ -1121,22 +1123,65 @@
     });
   });
 
-  /* ================= 笔记 ================= */
+  /* ================= 全班共享笔记（云端 workbench-notes 仓库） ================= */
+  const NOTES_API_URL = 'https://api.github.com/repos/CJB0316/workbench-notes/contents/notes.json';
+  const NOTES_TOKEN = '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';
   let currentNoteId = null;
+  let cloudNotes = [];
+  let notesBusy = false;
+
+  async function fetchNotesFromCloud() {
+    // GET 公开可读，无需令牌；返回结构与 data.json 兼容（数组 或 { notes: [] }）
+    const res = await fetchWithTimeout(NOTES_API_URL, { method: 'GET', cache: 'no-cache' }, 8000);
+    if (!res.ok) throw new Error('云端笔记请求失败 HTTP ' + res.status);
+    const meta = await res.json();
+    if (meta.content) {
+      const decoded = decodeURIComponent(escape(atob(String(meta.content).replace(/\n/g, ''))));
+      const obj = JSON.parse(decoded);
+      return Array.isArray(obj) ? obj : (obj.notes || []);
+    }
+    throw new Error('云端笔记响应中未找到内容');
+  }
+
+  async function saveNotesToCloud(notes) {
+    // 先 GET 取最新 sha，再 PUT 写入（Bearer 笔记令牌，权限仅限 workbench-notes 仓库）
+    const metaRes = await fetchWithTimeout(NOTES_API_URL, { method: 'GET', cache: 'no-cache' }, 10000);
+    if (!metaRes.ok) throw new Error('获取 sha 失败 HTTP ' + metaRes.status);
+    const meta = await metaRes.json();
+    if (!meta.sha) throw new Error('云端 notes.json 不存在，请先在仓库上传初始 notes.json');
+    const payload = {
+      message: 'sync notes @ ' + new Date().toISOString(),
+      content: utf8ToBase64(JSON.stringify({ updatedAt: Date.now(), notes: notes }, null, 2)),
+      sha: meta.sha
+    };
+    const putRes = await fetchWithTimeout(NOTES_API_URL, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + NOTES_TOKEN, 'Accept': 'application/vnd.github+json' },
+      body: JSON.stringify(payload)
+    }, 15000);
+    if (!putRes.ok) throw new Error('上传失败 HTTP ' + putRes.status);
+  }
+
+  function refreshNotesFromCloud() {
+    fetchNotesFromCloud().then(function (notes) {
+      cloudNotes = notes;
+      renderNotes();
+    }, function () {});
+  }
 
   function renderNotes() {
     const list = $('notes-list');
     list.innerHTML = '';
-    if (data.notes.length === 0) {
+    if (cloudNotes.length === 0) {
       $('note-title').value = '';
       $('note-content').value = '';
       currentNoteId = null;
       return;
     }
-    if (currentNoteId === null || !data.notes.some(function (n) { return n.id === currentNoteId; })) {
-      currentNoteId = data.notes[0].id;
+    if (currentNoteId === null || !cloudNotes.some(function (n) { return n.id === currentNoteId; })) {
+      currentNoteId = cloudNotes[0].id;
     }
-    data.notes.forEach(function (note) {
+    cloudNotes.forEach(function (note) {
       const li = document.createElement('li');
       if (note.id === currentNoteId) li.classList.add('active');
       const span = document.createElement('span');
@@ -1147,9 +1192,12 @@
       del.textContent = '✕';
       del.addEventListener('click', function (e) {
         e.stopPropagation();
-        data.notes = data.notes.filter(function (n) { return n.id !== note.id; });
-        if (currentNoteId === note.id) currentNoteId = null;
-        saveData(data); renderNotes(); toast('笔记已删除');
+        if (!confirm('确定删除这篇共享笔记吗？')) return;
+        const id = note.id;
+        cloudNotes = cloudNotes.filter(function (n) { return n.id !== id; });
+        if (currentNoteId === id) currentNoteId = null;
+        renderNotes();
+        saveNotesToCloud(cloudNotes).then(function () { toast('笔记已删除'); }, function () { toast('保存失败请重试'); refreshNotesFromCloud(); });
       });
       li.appendChild(del);
       li.addEventListener('click', function () {
@@ -1157,37 +1205,78 @@
       });
       list.appendChild(li);
     });
-    const cur = data.notes.find(function (n) { return n.id === currentNoteId; });
+    const cur = cloudNotes.find(function (n) { return n.id === currentNoteId; });
     if (cur) {
       $('note-title').value = cur.title || '';
       $('note-content').value = cur.content || '';
     }
   }
 
+  function initNotesFromCloud() {
+    fetchNotesFromCloud().then(function (notes) {
+      cloudNotes = notes;
+      renderNotes();
+    }, function () {
+      cloudNotes = [];
+      renderNotes();
+      toast('共享笔记加载失败，请重试');
+    });
+  }
+
   $('btn-note-new').addEventListener('click', function () {
+    if (notesBusy) return;
     const now = new Date();
     const note = { id: 'n' + Date.now(), title: '新笔记 ' + (now.getMonth() + 1) + '月' + now.getDate() + '日', content: '', updatedAt: now.toISOString() };
-    data.notes.unshift(note);
+    cloudNotes.unshift(note);
     currentNoteId = note.id;
-    saveData(data); renderNotes(); $('note-title').focus(); toast('已创建新笔记');
+    notesBusy = true;
+    renderNotes(); $('note-title').focus();
+    saveNotesToCloud(cloudNotes).then(function () {
+      notesBusy = false;
+      toast('已创建共享笔记');
+    }, function () {
+      notesBusy = false;
+      toast('保存失败请重试');
+      refreshNotesFromCloud();
+    });
   });
   $('btn-note-save').addEventListener('click', function () {
     if (currentNoteId === null) { $('btn-note-new').click(); return; }
-    const note = data.notes.find(function (n) { return n.id === currentNoteId; });
+    if (notesBusy) return;
+    const note = cloudNotes.find(function (n) { return n.id === currentNoteId; });
     if (note) {
       note.title = $('note-title').value.trim() || '未命名笔记';
       note.content = $('note-content').value;
       note.updatedAt = new Date().toISOString();
-      saveData(data); renderNotes(); toast('笔记已保存');
+      notesBusy = true;
+      renderNotes();
+      saveNotesToCloud(cloudNotes).then(function () {
+        notesBusy = false;
+        toast('笔记已保存');
+      }, function () {
+        notesBusy = false;
+        toast('保存失败请重试');
+        refreshNotesFromCloud();
+      });
     }
   });
   $('btn-note-delete').addEventListener('click', function () {
     if (currentNoteId === null) { toast('当前没有可删除的笔记'); return; }
-    if (confirm('确定删除这篇笔记吗？')) {
-      data.notes = data.notes.filter(function (n) { return n.id !== currentNoteId; });
-      currentNoteId = null;
-      saveData(data); renderNotes(); toast('笔记已删除');
-    }
+    if (!confirm('确定删除这篇共享笔记吗？')) return;
+    if (notesBusy) return;
+    const id = currentNoteId;
+    cloudNotes = cloudNotes.filter(function (n) { return n.id !== id; });
+    currentNoteId = null;
+    notesBusy = true;
+    renderNotes();
+    saveNotesToCloud(cloudNotes).then(function () {
+      notesBusy = false;
+      toast('笔记已删除');
+    }, function () {
+      notesBusy = false;
+      toast('保存失败请重试');
+      refreshNotesFromCloud();
+    });
   });
 
   /* ================= 番茄钟 ================= */
@@ -2055,7 +2144,7 @@
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = '班长工作台数据_' + todayKey() + '.json';
+    a.download = '班级工作台数据_' + todayKey() + '.json';
     a.click();
     URL.revokeObjectURL(a.href);
     toast('数据已导出');
@@ -2097,7 +2186,7 @@
     e.target.value = '';
   });
   $('btn-clear-all').addEventListener('click', function () {
-    if (confirm('确定清空所有数据（课程、任务、笔记、番茄、通讯录、值日、通知、作业、活动）吗？此操作不可恢复，建议先导出备份。')) {
+    if (confirm('确定清空所有本地数据（课程、任务、番茄、通讯录、值日、通知、作业、活动）吗？云端共享笔记不受影响。此操作不可恢复，建议先导出备份。')) {
       data = defaultData();
       saveData(data);
       currentNoteId = null;
@@ -2137,7 +2226,7 @@
     const stats = [
       { icon: '🗓️', label: '已排课程', value: courseNames.length, color: '#4f6ef7' },
       { icon: '✅', label: '任务进度', value: totalTasks ? doneTasks + '/' + totalTasks : 0, color: '#2f9e6e' },
-      { icon: '📝', label: '学习笔记', value: data.notes.length, color: '#e59f19' },
+      { icon: '📝', label: '共享笔记', value: cloudNotes.length, color: '#e59f19' },
       { icon: '🍅', label: '番茄专注', value: data.pomodoro.sessions || 0, color: '#e5484d' },
       { icon: '👥', label: '班级成员', value: data.contacts.length, color: '#7b5cf0' },
       { icon: '📋', label: '作业登记', value: data.homework.length, color: '#0ea5e9' }
@@ -2177,20 +2266,20 @@
     if (h < 6) greet = '夜深了';
     else if (h < 12) greet = '早上好';
     else if (h < 18) greet = '下午好';
-    el.textContent = greet + '，班长！';
+    el.textContent = greet + '，同学们！';
   }
 
   document.querySelectorAll('#main-nav .nav-links a').forEach(function (a) {
     a.addEventListener('click', function () { switchTab(a.getAttribute('data-tab-target')); });
   });
   $('btn-hero-study').addEventListener('click', function () { switchTab('study'); });
-  $('btn-hero-note').addEventListener('click', function () { switchTab('study'); });
+  $('btn-hero-note').addEventListener('click', function () { switchTab('notes'); });
 
   /* ================= 初始化 ================= */
   updateDate();
   renderCourseTable();
   renderTasks();
-  renderNotes();
+  initNotesFromCloud();
   renderContacts();
   renderDuty();
   renderNotices();
