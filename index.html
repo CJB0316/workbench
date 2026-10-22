@@ -804,7 +804,7 @@
     '#btn-att-save', '#btn-att-del', '#btn-att-all-normal', '#btn-att-all-late', '#btn-att-all-leave', '#btn-att-all-absent',
     'td.cell', '.task-check', '.task-del', '.contact-item .btn-sm', '.duty-day',
     '.notice-item .item-del', '.hw-item .btn-sm', '.hw-item .item-del', '.act-item .btn-sm', '.act-item .item-del',
-    '.att-opt', '.att-hist-del'
+    '.att-opt', '.att-hist-item .btn-sm:not(.att-hist-view)', '.att-hist-del', '#btn-admin-pwd-ok'
   ].join(',');
   document.addEventListener('click', function (e) {
     if (isAdmin()) return;
@@ -1891,7 +1891,7 @@
       rec.items.forEach(function (it) { if (count[it.state] !== undefined) count[it.state]++; });
       html += '<div class="att-hist-item"><span class="att-hist-date">' + escapeHtml(d) + '</span>' +
         '<span class="att-hist-stat">正常 ' + count.normal + ' / 迟到 ' + count.late + ' / 请假 ' + count.leave + ' / 缺勤 ' + count.absent + '</span>' +
-        '<button class="btn-sm ghost" data-act="view" data-date="' + escapeHtml(d) + '">查看</button>' +
+        '<button class="btn-sm ghost att-hist-view" data-act="view" data-date="' + escapeHtml(d) + '">查看</button>' +
         '<button class="btn-sm ghost" data-act="edit" data-date="' + escapeHtml(d) + '">修改</button>' +
         '<button class="btn-sm danger att-hist-del" data-act="del" data-date="' + escapeHtml(d) + '">删除</button></div>';
     });
